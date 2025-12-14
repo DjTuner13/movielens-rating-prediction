@@ -12,7 +12,23 @@ from mlflow.tracking import MlflowClient
 # -----------------------------
 # CONFIG
 # -----------------------------
-TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+if not TRACKING_URI:
+    raise RuntimeError(
+        "MLFLOW_TRACKING_URI environment variable must be set to the MLflow server URI. "
+        "Refusing to default to localhost in production."
+    )
+mlflow.set_tracking_uri(TRACKING_URI)
+
+# Validate MLflow server connectivity at startup
+try:
+    # Attempt a simple operation to check connectivity
+    client = MlflowClient(tracking_uri=TRACKING_URI)
+    client.list_experiments()
+except Exception as e:
+    raise RuntimeError(
+        f"Could not connect to MLflow server at '{TRACKING_URI}': {e}"
+    )
 MODEL_NAME = "movielens_top3"
 
 # Map internal labels (from register_model.py) to API keys
