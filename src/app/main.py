@@ -2,26 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
-
+import os
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 import mlflow
+from mlflow.tracking import MlflowClient
 
 # -----------------------------
 # CONFIG
 # -----------------------------
-TRACKING_URI = "http://44.192.74.248:5000"
+TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MODEL_NAME = "movielens_top3"
 
-# Registry versions (matches what you registered)
-MODEL1_VERSION = "1"  # GLM
-MODEL2_VERSION = "2"  # RandomForest
-MODEL3_VERSION = "3"  # XGBoost
+# Map internal labels (from register_model.py) to API keys
+REQUIRED_LABELS = ["GLM", "RandomForest", "XGBoost"]
 
-MODEL_LABELS = {"1": "GLM", "2": "RandomForest", "3": "XGBoost"}
-
-# Expected feature columns (from your processed dataset)
+# Expected feature columns 
 GENRE_COLS = [
     "genre_Action", "genre_Adventure", "genre_Animation", "genre_Children's",
     "genre_Comedy", "genre_Crime", "genre_Documentary", "genre_Drama",
@@ -72,7 +69,7 @@ class Record(BaseModel):
         return v
 
     class Config:
-        populate_by_name = True  # allow aliases like "genre_Children's"
+        populate_by_name = True
 
 
 class PredictRequest(BaseModel):
@@ -93,8 +90,9 @@ class PredictResponse(BaseModel):
 # -----------------------------
 app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
 
+# Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
 _models: Dict[str, Any] = {}
-
+_versions: Dict[str, str] = {} # {"GLM": "1", ...}
 
 def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
     recs = payload.records if isinstance(payload.records, list) else [payload.records]
@@ -118,27 +116,42 @@ def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
 
     return df
 
-
-def do_predict(version: str, X: pd.DataFrame) -> List[float]:
-    if version not in _models:
-        raise HTTPException(status_code=500, detail=f"Model version {version} not loaded")
-    try:
-        preds = _models[version].predict(X)
-        return [float(p) for p in list(preds)]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Prediction failed: {e}")
-
-
 @app.on_event("startup")
 def load_models() -> None:
+    print(f"[startup] Connecting to MLflow at {TRACKING_URI}")
     mlflow.set_tracking_uri(TRACKING_URI)
+    client = MlflowClient()
 
-    for v in [MODEL1_VERSION, MODEL2_VERSION, MODEL3_VERSION]:
-        uri = f"models:/{MODEL_NAME}/{v}"
-        _models[v] = mlflow.pyfunc.load_model(uri)
+    # Find latest version for each label
+    # We query all versions of the registered model
+    versions = client.search_model_versions(f"name='{MODEL_NAME}'")
+    
+    # Organize by label
+    # We want the LATEST version that has the tag 'model_label' == 'XGBoost', etc.
+    # search_model_versions returns latest first usually, but let's sort to be sure.
+    versions = sorted(versions, key=lambda x: int(x.version), reverse=True)
 
-    print(f"[startup] loaded models: {MODEL_NAME} v1/v2/v3")
+    loaded_labels = set()
 
+    for v in versions:
+        if not v.tags:
+            continue
+        label = v.tags.get("model_label")
+        if label in REQUIRED_LABELS and label not in loaded_labels:
+            print(f"[startup] Found {label} -> Version {v.version}")
+            
+            uri = f"models:/{MODEL_NAME}/{v.version}"
+            try:
+                model = mlflow.pyfunc.load_model(uri)
+                _models[label] = model
+                _versions[label] = v.version
+                loaded_labels.add(label)
+                print(f"[startup] Loaded {label} successfully.")
+            except Exception as e:
+                print(f"[startup] Failed to load {label} (v{v.version}): {e}")
+
+    if not loaded_labels:
+        print("[startup] WARNING: No models loaded! Check MLflow Registry.")
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
@@ -146,47 +159,27 @@ def health() -> Dict[str, Any]:
         "status": "ok",
         "tracking_uri": TRACKING_URI,
         "model_name": MODEL_NAME,
-        "loaded_versions": sorted(list(_models.keys())),
+        "loaded_models": _versions,
     }
 
-
-@app.post("/predict_model1", response_model=PredictResponse)
-def predict_model1(req: PredictRequest) -> PredictResponse:
+@app.post("/predict/{label}", response_model=PredictResponse)
+def predict(label: str, req: PredictRequest) -> PredictResponse:
+    if label not in _models:
+        raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
+    
     X = normalize_to_df(req)
-    preds = do_predict(MODEL1_VERSION, X)
-    return PredictResponse(
-        model_name=MODEL_NAME,
-        model_version=MODEL1_VERSION,
-        model_label=MODEL_LABELS[MODEL1_VERSION],
-        timestamp_utc=datetime.now(timezone.utc).isoformat(),
-        n_records=len(preds),
-        predictions=preds,
-    )
-
-
-@app.post("/predict_model2", response_model=PredictResponse)
-def predict_model2(req: PredictRequest) -> PredictResponse:
-    X = normalize_to_df(req)
-    preds = do_predict(MODEL2_VERSION, X)
-    return PredictResponse(
-        model_name=MODEL_NAME,
-        model_version=MODEL2_VERSION,
-        model_label=MODEL_LABELS[MODEL2_VERSION],
-        timestamp_utc=datetime.now(timezone.utc).isoformat(),
-        n_records=len(preds),
-        predictions=preds,
-    )
-
-
-@app.post("/predict_model3", response_model=PredictResponse)
-def predict_model3(req: PredictRequest) -> PredictResponse:
-    X = normalize_to_df(req)
-    preds = do_predict(MODEL3_VERSION, X)
-    return PredictResponse(
-        model_name=MODEL_NAME,
-        model_version=MODEL3_VERSION,
-        model_label=MODEL_LABELS[MODEL3_VERSION],
-        timestamp_utc=datetime.now(timezone.utc).isoformat(),
-        n_records=len(preds),
-        predictions=preds,
-    )
+    
+    try:
+        preds = _models[label].predict(X)
+        preds_list = [float(p) for p in list(preds)]
+        
+        return PredictResponse(
+            model_name=MODEL_NAME,
+            model_version=_versions[label],
+            model_label=label,
+            timestamp_utc=datetime.now(timezone.utc).isoformat(),
+            n_records=len(preds_list),
+            predictions=preds_list,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Prediction failed: {e}")
