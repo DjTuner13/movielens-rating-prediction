@@ -140,7 +140,6 @@ def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
 async def lifespan(app: FastAPI):
     # Startup: Load models
     logger.info(f"Connecting to MLflow at {TRACKING_URI}")
-    mlflow.set_tracking_uri(TRACKING_URI)
     client = MlflowClient()
 
     # Find latest version for each label
