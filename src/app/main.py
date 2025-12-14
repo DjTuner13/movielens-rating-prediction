@@ -155,7 +155,6 @@ async def lifespan(app: FastAPI):
         print("[startup] WARNING: No models loaded! Check MLflow Registry.")
     
     yield
-    
     # Shutdown: Clean up resources if needed
     print("[shutdown] Cleaning up resources...")
     _models.clear()
