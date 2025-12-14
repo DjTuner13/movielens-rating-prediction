@@ -86,14 +86,8 @@ class PredictResponse(BaseModel):
 
 
 # -----------------------------
-# FastAPI App
+# Helper Functions
 # -----------------------------
-app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
-
-# Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
-_models: Dict[str, Any] = {}
-_versions: Dict[str, str] = {} # {"GLM": "1", ...}
-
 def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
     recs = payload.records if isinstance(payload.records, list) else [payload.records]
     rows = [r.model_dump(by_alias=True) for r in recs]
@@ -115,6 +109,16 @@ def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
         df[c] = pd.to_numeric(df[c], errors="raise")
 
     return df
+
+
+# -----------------------------
+# FastAPI App
+# -----------------------------
+app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
+
+# Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
+_models: Dict[str, Any] = {}
+_versions: Dict[str, str] = {} # {"GLM": "1", ...}
 
 @app.on_event("startup")
 def load_models() -> None:
