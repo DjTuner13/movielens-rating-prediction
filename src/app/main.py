@@ -152,9 +152,9 @@ def load_models() -> None:
         try:
             return Version(model_version.version)
         except InvalidVersion:
-            # If version string is invalid, return lowest version so it sorts last (reverse=True)
+            # If version string is invalid, return a development version that sorts lowest
             print(f"[startup] Warning: Invalid version '{model_version.version}', sorting with lowest priority")
-            return Version("0")
+            return Version("0.0.0.dev0")
     
     versions = sorted(versions, key=version_key, reverse=True)
 
