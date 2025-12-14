@@ -13,7 +13,8 @@ from mlflow.tracking import MlflowClient
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True
 )
 logger = logging.getLogger(__name__)
 
