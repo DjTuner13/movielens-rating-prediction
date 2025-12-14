@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 import mlflow
 from mlflow.tracking import MlflowClient
+from packaging.version import Version, InvalidVersion
 
 # -----------------------------
 # CONFIG
@@ -145,7 +146,21 @@ def load_models() -> None:
     # Organize by label
     # We want the LATEST version that has the tag 'model_label' == 'XGBoost', etc.
     # search_model_versions returns latest first usually, but let's sort to be sure.
-    versions = sorted(versions, key=lambda x: int(x.version), reverse=True)
+    # Use packaging.version.Version for robust version comparison that handles
+    # both simple integer versions (e.g., "1", "2") and semantic versions (e.g., "1.0.0")
+    def version_key(model_version):
+        try:
+            return Version(model_version.version)
+        except InvalidVersion:
+            # Fallback: if version string is invalid, try parsing as int
+            try:
+                return Version(str(int(model_version.version)))
+            except (ValueError, TypeError):
+                # Last resort: treat as string "0" to sort it last
+                print(f"[startup] Warning: Invalid version '{model_version.version}', treating as lowest priority")
+                return Version("0")
+    
+    versions = sorted(versions, key=version_key, reverse=True)
 
     loaded_labels = set()
 
