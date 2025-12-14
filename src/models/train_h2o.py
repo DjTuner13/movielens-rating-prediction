@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class H2OWrapper:
-    def __init__(self, max_runtime_secs=600, project_name="movielens_experiment", seed=42):
+    def __init__(self, max_runtime_secs=600, project_name="movielens_cloud", seed=42):
         """
         Initialize the H2O AutoML wrapper.
         """
@@ -21,6 +21,7 @@ class H2OWrapper:
         self.valid_frame = None
         
         # Set MLflow experiment
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
         mlflow.set_experiment(self.project_name)
         
     def start_h2o(self):

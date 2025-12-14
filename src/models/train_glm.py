@@ -13,7 +13,9 @@ from sklearn.preprocessing import StandardScaler
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-mlflow.set_experiment("movielens_experiment")
+# MLflow Configuration
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+mlflow.set_experiment("movielens_cloud")
 
 def load_data(path):
     """Load data and encode features for GLM."""
@@ -41,7 +43,7 @@ def train_model(train_path, valid_path, alpha=0.1, l1_ratio=0.5, output_dir="mod
         params = {
             "alpha": alpha,
             "l1_ratio": l1_ratio,
-            "model_type": "GLM (ElasticNet)"
+            "model_type": "GLM"
         }
         mlflow.log_params(params)
 

@@ -16,7 +16,9 @@ from sklearn.metrics import (
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-mlflow.set_experiment("movielens_experiment")
+# MLflow Configuration
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+mlflow.set_experiment("movielens_cloud")
 
 def load_data(path):
     """Load data and encode features for Random Forest."""
@@ -44,7 +46,7 @@ def train_model(train_path, valid_path, n_estimators=50, max_depth=10, output_di
         params = {
             "n_estimators": n_estimators,
             "max_depth": max_depth,
-            "model_type": "DRF (Random Forest)"
+            "model_type": "RandomForest"
         }
         mlflow.log_params(params)
         

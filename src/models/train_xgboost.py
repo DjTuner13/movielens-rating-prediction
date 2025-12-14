@@ -11,7 +11,13 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-mlflow.set_experiment("movielens_experiment")
+# MLflow Configuration
+# If MLFLOW_TRACKING_URI is not set, it defaults to local ./mlruns
+# If MLFLOW_ARTIFACT_ROOT is set (e.g., s3://...), we don't set it manually in set_experiment,
+# but we trust the user environment or set it explicitly if needed.
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns"))
+experiment_name = "movielens_cloud"
+mlflow.set_experiment(experiment_name)
 
 def load_data(path):
     """Load data and prepare for XGBoost (Label Encode Categoricals)."""

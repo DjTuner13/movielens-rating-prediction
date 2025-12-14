@@ -44,6 +44,15 @@ def main():
             sys.exit(1)
             
     logger.info("Pipeline finished successfully! Data is ready in data/processed/")
+    
+    # Upload to S3 (Backup & Versioning)
+    BUCKET_NAME = "movielens-data-7741bd4d"
+    logger.info(f"Uploading processed data to s3://{BUCKET_NAME}/processed/...")
+    try:
+        subprocess.run(["aws", "s3", "cp", "data/processed/", f"s3://{BUCKET_NAME}/processed/", "--recursive"], check=True)
+        logger.info("Upload complete! ☁️")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to upload to S3: {e}")
 
 if __name__ == "__main__":
     main()
