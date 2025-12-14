@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 import os
+import threading
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -93,6 +94,7 @@ app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
 # Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
 _models: Dict[str, Any] = {}
 _versions: Dict[str, str] = {} # {"GLM": "1", ...}
+_models_lock = threading.Lock()  # Thread-safe access to _models and _versions
 
 def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
     recs = payload.records if isinstance(payload.records, list) else [payload.records]
@@ -143,8 +145,9 @@ def load_models() -> None:
             uri = f"models:/{MODEL_NAME}/{v.version}"
             try:
                 model = mlflow.pyfunc.load_model(uri)
-                _models[label] = model
-                _versions[label] = v.version
+                with _models_lock:
+                    _models[label] = model
+                    _versions[label] = v.version
                 loaded_labels.add(label)
                 print(f"[startup] Loaded {label} successfully.")
             except Exception as e:
@@ -155,27 +158,32 @@ def load_models() -> None:
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
+    with _models_lock:
+        loaded_models = _versions.copy()
     return {
         "status": "ok",
         "tracking_uri": TRACKING_URI,
         "model_name": MODEL_NAME,
-        "loaded_models": _versions,
+        "loaded_models": loaded_models,
     }
 
 @app.post("/predict/{label}", response_model=PredictResponse)
 def predict(label: str, req: PredictRequest) -> PredictResponse:
-    if label not in _models:
-        raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
+    with _models_lock:
+        if label not in _models:
+            raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
+        model = _models[label]
+        version = _versions[label]
     
     X = normalize_to_df(req)
     
     try:
-        preds = _models[label].predict(X)
+        preds = model.predict(X)
         preds_list = [float(p) for p in list(preds)]
         
         return PredictResponse(
             model_name=MODEL_NAME,
-            model_version=_versions[label],
+            model_version=version,
             model_label=label,
             timestamp_utc=datetime.now(timezone.utc).isoformat(),
             n_records=len(preds_list),
