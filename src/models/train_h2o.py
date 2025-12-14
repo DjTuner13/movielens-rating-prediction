@@ -3,20 +3,25 @@ from h2o.automl import H2OAutoML
 import os
 import pandas as pd
 import logging
+import mlflow
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class H2OWrapper:
-    def __init__(self, max_runtime_secs=600, seed=42):
+    def __init__(self, max_runtime_secs=600, project_name="movielens_experiment", seed=42):
         """
         Initialize the H2O AutoML wrapper.
         """
         self.max_runtime_secs = max_runtime_secs
+        self.project_name = project_name
         self.seed = seed
         self.aml = None
         self.train_frame = None
         self.valid_frame = None
+        
+        # Set MLflow experiment
+        mlflow.set_experiment(self.project_name)
         
     def start_h2o(self):
         """Initialize the H2O cluster."""
@@ -45,44 +50,57 @@ class H2OWrapper:
                 self.valid_frame[col] = self.valid_frame[col].asfactor()
 
     def train(self):
-        """Run the H2O AutoML training process."""
+        """Run the H2O AutoML training process with MLflow logging."""
         if not self.train_frame:
             raise ValueError("Data not loaded. Call load_data() first.")
             
         logger.info(f"Starting AutoML training for {self.max_runtime_secs} seconds...")
         
-        self.aml = H2OAutoML(
-            max_runtime_secs=self.max_runtime_secs,
-            seed=self.seed,
-            project_name="movielens_experiment",
-            sort_metric="RMSE"
-        )
-        
-        self.aml.train(
-            x=self.features,
-            y=self.target,
-            training_frame=self.train_frame,
-            validation_frame=self.valid_frame
-        )
-        logger.info("AutoML training complete.")
-        
-        # Log Metrics
-        lb = self.aml.leaderboard
-        lb_df = lb.as_data_frame()
-        best_rmse = lb_df.iloc[0]['rmse']
-        logger.info(f"Best Model RMSE: {best_rmse}")
-        
-        # Save artifacts
-        self.save_best_model()
+        # Start MLflow run
+        with mlflow.start_run(run_name="H2O_AutoML"):
+            # Log Parameters
+            mlflow.log_param("model_type", "H2O_AutoML")
+            mlflow.log_param("max_runtime_secs", self.max_runtime_secs)
+            mlflow.log_param("seed", self.seed)
+            
+            self.aml = H2OAutoML(
+                max_runtime_secs=self.max_runtime_secs,
+                seed=self.seed,
+                project_name=self.project_name,
+                sort_metric="RMSE"
+            )
+            
+            self.aml.train(
+                x=self.features,
+                y=self.target,
+                training_frame=self.train_frame,
+                validation_frame=self.valid_frame
+            )
+            logger.info("AutoML training complete.")
+            
+            # Log Metrics from Leaderboard (Best Model)
+            lb = self.aml.leaderboard
+            lb_df = lb.as_data_frame()
+            best_rmse = lb_df.iloc[0]['rmse']
+            best_mae = lb_df.iloc[0]['mae']
+            
+            mlflow.log_metric("rmse", best_rmse)
+            mlflow.log_metric("mae", best_mae)
+            
+            logger.info(f"Best Model RMSE: {best_rmse}")
+            
+            # Save artifacts
+            self.save_best_model()
 
     def save_best_model(self, output_dir="models/h2o"):
-        """Save the best model and leaderboard."""
+        """Save the best model and leaderboard, and log to MLflow."""
         os.makedirs(output_dir, exist_ok=True)
         
         # Save Leaderboard
         lb = self.aml.leaderboard
         lb_path = os.path.join(output_dir, "leaderboard.csv")
         h2o.export_file(lb, path=lb_path, force=True)
+        mlflow.log_artifact(lb_path) # Upload to MLflow
         
         # Save Model
         best_model = self.aml.leader
