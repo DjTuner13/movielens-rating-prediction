@@ -188,14 +188,17 @@ def health() -> Dict[str, Any]:
 
 @app.post("/predict/{label}", response_model=PredictResponse)
 def predict(
-    label: ModelLabel = Path(..., description="Model label to use for prediction"),
-    req: PredictRequest = ...
+    req: PredictRequest,
+    label: ModelLabel = Path(..., description="Model label to use for prediction")
 ) -> PredictResponse:
     # Convert Enum to string for dictionary lookup
     label_str = label.value
     
     if label_str not in _models:
-        raise HTTPException(status_code=404, detail=f"Model '{label_str}' not found or not loaded.")
+        raise HTTPException(
+            status_code=503, 
+            detail=f"Model '{label_str}' is not currently loaded. This is a server configuration issue."
+        )
     
     X = normalize_to_df(req)
     
