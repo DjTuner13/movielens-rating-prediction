@@ -19,3 +19,4 @@ wheels/
 mlruns/
 mlflow.db
 # Terraform.terraform/*.tfstate*.tfstate.backup*.tfvars
+comparison_table.csv
