@@ -29,7 +29,7 @@ mlflow.set_tracking_uri(TRACKING_URI)
 try:
     # Attempt a simple operation to check connectivity
     client = MlflowClient(tracking_uri=TRACKING_URI)
-    client.list_experiments()
+    client.search_experiments(max_results=1)
 except Exception as e:
     raise RuntimeError(
         f"Could not connect to MLflow server at '{TRACKING_URI}': {e}"
