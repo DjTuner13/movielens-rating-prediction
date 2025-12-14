@@ -226,5 +226,29 @@ resource "aws_instance" "ml_server" {
               systemctl daemon-reload
               systemctl enable mlflow
               systemctl start mlflow
+
+              # 7. Create FastAPI Systemd Service
+              cat <<EOT > /etc/systemd/system/fastapi.service
+              [Unit]
+              Description=MovieLens Prediction API
+              After=network.target mlflow.service
+
+              [Service]
+              User=ubuntu
+              WorkingDirectory=/home/ubuntu/movielens-rating-prediction
+              Environment="MLFLOW_TRACKING_URI=http://localhost:5000"
+              # Use the full path to uv
+              ExecStart=/home/ubuntu/.local/bin/uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000
+              Restart=always
+              RestartSec=10
+
+              [Install]
+              WantedBy=multi-user.target
+              EOT
+
+              # 8. Start FastAPI
+              systemctl daemon-reload
+              systemctl enable fastapi
+              systemctl start fastapi
               EOF
 }

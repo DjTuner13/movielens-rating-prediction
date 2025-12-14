@@ -35,71 +35,77 @@ uv run python scripts/run_pipeline.py
 2.  **Feature Engineering**: One-hot encodes genres and selects relevant features.
 3.  **Splitting**: Performs a **Time-Based Split** to create `train.csv`, `validate.csv`, and `test.csv` in `data/processed/`.
 
-## Model Training
-We implemented 4 models based on H2O's leaderboard suggestions:
+## ☁️ AWS Production Workflow
+This workflow assumes you have provisioned the infrastructure via Terraform.
 
-### A. AutoML (H2O)
-```bash
-# Model 1: H2O AutoML
-uv run python -m src.models.train_h2o
-```
+### 1. Connect & Initial Setup (Day 2 Checklist)
+When starting a **fresh EC2 instance**, follow these steps to restore service:
 
-### B. Manual Models (Scikit-Learn / XGBoost)
+1.  **SSH into the Server** (Use the IP from `terraform output`):
+    ```bash
+    ssh -i ~/.ssh/mlflow-key.pem ubuntu@<PUBLIC_IP>
+    ```
+2.  **Sync Code**:
+    ```bash
+    cd movielens-rating-prediction
+    # Ensure latest code (especially if you just replaced the instance)
+    git pull
+    # Sync dependencies
+    /home/ubuntu/.local/bin/uv sync
+    ```
+
+### 2. Run MLOps Pipeline
+Execute these scripts on the server to update models.
+
+**A. Train Models (Logs to Neon DB & S3)**
 ```bash
-# Model 2: XGBoost (Gradient Boosting)
+# Example: Train XGBoost (Tag: XGBoost)
 uv run python -m src.models.train_xgboost
-
-# Model 3: Random Forest (DRF)
-uv run python -m src.models.train_drf
-
-# Model 4: ElasticNet (GLM)
-uv run python -m src.models.train_glm
 ```
 
-## Experiment Tracking
-All runs are logged to **MLflow**. To view the dashboard:
-```bash
-uv run mlflow ui
-```
-Open [http://127.0.0.1:5000](http://127.0.0.1:5000) to compare RMSE metrics.
-
-## 4. Post-Training Workflow
-After training the models, we run automated scripts to select and register the best one.
-
-### A. Compare Models
-Finds the best model (lowest RMSE) from the latest `movielens_cloud` experiment runs.
+**B. Compare & Select Champion**
+Automatically finds the best model from `movielens_cloud` experiment.
 ```bash
 uv run scripts/post_training/compare_models.py
 ```
-*Output: Generates `comparison_table.csv` and prints the Champion.*
 
-### B. Register Champion
-Registers the top models to the **MLflow Model Registry** with intuitive tags (`XGBoost`, `GLM`).
+**C. Register to Model Registry**
+Tags the best models so the API can find them.
 ```bash
 uv run scripts/post_training/register_model.py
 ```
 
-## 5. API Deployment (FastAPI)
-Serve the registered models via a production-ready API.
+### 3. Serve API (FastAPI)
+The API starts **automatically** on boot (via `systemd`).
 
-### Run the API
+**Check Status & Logs:**
 ```bash
-# Set Tracking URI (if not using localhost)
-export MLFLOW_TRACKING_URI=http://localhost:5000
+# Check if running
+systemctl status fastapi
 
-# Start Uvicorn (Interactive)
-uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000
+# View real-time logs
+journalctl -u fastapi -f
+```
 
-# Start Uvicorn (Background / Production)
+*(Manual Start - only if needed):*
+```bash
 nohup uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &
-# View logs: tail -f api.log
-
 ```
 
-### Example Prediction
-**POST** `/predict/XGBoost`
-```json
-{
-  "records": [{ "userId": 1, "movieId": 1193, "gender": "M", "age": 25, "occupation": 12 }]
-}
-```
+### 4. Accessing Services
+Once running, access the services via your instance's **Public IP**:
+
+| Service | URL | Description |
+| :--- | :--- | :--- |
+| **MLflow UI** | `http://<Public-IP>:5000` | View Experiments, Metrics, and Model Registry. |
+| **API Docs** | `http://<Public-IP>:8000/docs` | Interactive Swagger UI to test predictions. |
+
+#### 🔍 How to use Swagger UI
+1.  Go to the **API Docs** URL.
+2.  Click **POST /predict/{label}** -> **Try it out**.
+3.  **Important**: In the `label` field, type one of the model tags:
+    *   `XGBoost` (Recommended)
+    *   `GLM`
+    *   `RandomForest`
+4.  Click **Execute**.
+
