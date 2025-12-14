@@ -169,13 +169,15 @@ def health() -> Dict[str, Any]:
 
 @app.post("/predict/{label}", response_model=PredictResponse)
 def predict(label: str, req: PredictRequest) -> PredictResponse:
+    model = None
+    version = None
+    
     with _models_lock:
-        model_exists = label in _models
-        if model_exists:
+        if label in _models:
             model = _models[label]
             version = _versions[label]
     
-    if not model_exists:
+    if model is None:
         raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
     
     X = normalize_to_df(req)
