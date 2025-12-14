@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 import os
+import logging
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 import mlflow
 from mlflow.tracking import MlflowClient
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # -----------------------------
 # CONFIG
@@ -134,7 +139,7 @@ def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
 
 @app.on_event("startup")
 def load_models() -> None:
-    print(f"[startup] Connecting to MLflow at {TRACKING_URI}")
+    logger.info(f"Connecting to MLflow at {TRACKING_URI}")
     mlflow.set_tracking_uri(TRACKING_URI)
     client = MlflowClient()
 
@@ -154,7 +159,7 @@ def load_models() -> None:
             continue
         label = v.tags.get("model_label")
         if label in REQUIRED_LABELS and label not in loaded_labels:
-            print(f"[startup] Found {label} -> Version {v.version}")
+            logger.info(f"Found {label} -> Version {v.version}")
             
             uri = f"models:/{MODEL_NAME}/{v.version}"
             try:
@@ -162,12 +167,12 @@ def load_models() -> None:
                 _models[label] = model
                 _versions[label] = v.version
                 loaded_labels.add(label)
-                print(f"[startup] Loaded {label} successfully.")
+                logger.info(f"Loaded {label} successfully.")
             except Exception as e:
-                print(f"[startup] Failed to load {label} (v{v.version}): {e}")
+                logger.error(f"Failed to load {label} (v{v.version}): {e}")
 
     if not loaded_labels:
-        print("[startup] WARNING: No models loaded! Check MLflow Registry.")
+        logger.warning("No models loaded! Check MLflow Registry.")
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
