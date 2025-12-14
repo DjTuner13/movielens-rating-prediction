@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
+from contextlib import asynccontextmanager
 import os
 import logging
 import pandas as pd
@@ -109,8 +110,6 @@ class PredictResponse(BaseModel):
 # -----------------------------
 # FastAPI App
 # -----------------------------
-app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
-
 # Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
 _models: Dict[str, Any] = {}
 _versions: Dict[str, str] = {} # {"GLM": "1", ...}
@@ -137,8 +136,9 @@ def normalize_to_df(payload: PredictRequest) -> pd.DataFrame:
 
     return df
 
-@app.on_event("startup")
-def load_models() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Load models
     logger.info(f"Connecting to MLflow at {TRACKING_URI}")
     mlflow.set_tracking_uri(TRACKING_URI)
     client = MlflowClient()
@@ -173,6 +173,13 @@ def load_models() -> None:
 
     if not loaded_labels:
         logger.warning("No models loaded! Check MLflow Registry.")
+    
+    yield
+    
+    # Shutdown: Clean up resources if needed
+    logger.info("Shutting down application")
+
+app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
