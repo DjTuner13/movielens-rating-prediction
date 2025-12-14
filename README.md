@@ -56,49 +56,45 @@ uv run python -m src.models.train_drf
 uv run python -m src.models.train_glm
 ```
 
-## ☁️ AWS Cloud Workflow (Production)
-
-We have fully automated the specific MLOps infrastructure using **Terraform**.
-
-### 1. Deploy Infrastructure
-Provision the **EC2 Server (t3.small)**, **S3 Buckets**, and **MLflow Service** with one command:
-```bash
-cd infra
-# Uses terraform.tfvars for secrets (Neon DSN, Key Name)
-terraform apply
-```
-
-### 2. Connect to the Server
-Use the IP output from Terraform:
-```bash
-ssh -i ~/.ssh/mlflow-key.pem ubuntu@<PUBLIC_IP>
-```
-
-### 3. Run the Pipeline (Zero-Touch)
-The server automatically installs Python, MLflow, and downloads the raw data from S3 on boot.
-Just run the training:
-```bash
-# 1. Setup Environment (Once per session)
-source $HOME/.local/bin/env
-cd movielens-rating-prediction
-uv sync
-
-# 2. Run Data Pipeline (Downloads from S3 -> Process -> Uploads to S3)
-uv run scripts/run_pipeline.py
-
-# 3. Train Models (Logs to Neon & S3)
-uv run python -m src.models.train_xgboost
-```
-
-### 4. Monitor Experiments
-*   **MLflow UI**: [http://<PUBLIC_IP>:5000](http://<PUBLIC_IP>:5000)
-    *   Tracks Parameters, Metrics (RMSE), and Artifacts (Models).
-*   **Data Warehouse**: `s3://movielens-data-XXXX/processed/`
-    *   Stores versioned datasets (`train.csv`, `test.csv`).
-
-## Experiment Tracking (Local)
-If running locally, you can still view the UI:
+## Experiment Tracking
+All runs are logged to **MLflow**. To view the dashboard:
 ```bash
 uv run mlflow ui
 ```
-Open [http://127.0.0.1:5000](http://127.0.0.1:5000).
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) to compare RMSE metrics.
+
+## 4. Post-Training Workflow
+After training the models, we run automated scripts to select and register the best one.
+
+### A. Compare Models
+Finds the best model (lowest RMSE) from the latest `movielens_cloud` experiment runs.
+```bash
+uv run scripts/post_training/compare_models.py
+```
+*Output: Generates `comparison_table.csv` and prints the Champion.*
+
+### B. Register Champion
+Registers the top models to the **MLflow Model Registry** with intuitive tags (`XGBoost`, `GLM`).
+```bash
+uv run scripts/post_training/register_model.py
+```
+
+## 5. API Deployment (FastAPI)
+Serve the registered models via a production-ready API.
+
+### Run the API
+```bash
+# Set Tracking URI (if not using localhost)
+export MLFLOW_TRACKING_URI=http://localhost:5000
+
+# Start Uvicorn
+uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Example Prediction
+**POST** `/predict/XGBoost`
+```json
+{
+  "records": [{ "userId": 1, "movieId": 1193, "gender": "M", "age": 25, "occupation": 12 }]
+}
+```
