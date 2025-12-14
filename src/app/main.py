@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 import os
 import logging
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path, Body
 from pydantic import BaseModel, Field, field_validator
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -55,11 +55,11 @@ FEATURE_COLS = BASE_COLS + GENRE_COLS
 # Pydantic Schemas
 # -----------------------------
 class Record(BaseModel):
-    userId: int = Field(..., ge=1)
-    movieId: int = Field(..., ge=1)
-    gender: str = Field(..., description="M or F")
-    age: int = Field(..., ge=0)
-    occupation: int = Field(..., ge=0)
+    userId: int = Field(..., ge=1, description="User ID from the MovieLens dataset")
+    movieId: int = Field(..., ge=1, description="Movie ID from the MovieLens dataset")
+    gender: str = Field(..., description="Gender: 'M' for Male, 'F' for Female")
+    age: int = Field(..., ge=0, description="User's age")
+    occupation: int = Field(..., ge=0, description="Occupation code (0-20)")
 
     # Optional genre one-hots (default 0 if omitted)
     genre_Action: Optional[int] = 0
@@ -91,6 +91,17 @@ class Record(BaseModel):
 
     class Config:
         populate_by_name = True
+        json_schema_extra = {
+            "example": {
+                "userId": 1,
+                "movieId": 1193,
+                "gender": "M",
+                "age": 25,
+                "occupation": 12,
+                "genre_Drama": 1,
+                "genre_Comedy": 0
+            }
+        }
 
 
 class PredictRequest(BaseModel):
@@ -109,7 +120,21 @@ class PredictResponse(BaseModel):
 # -----------------------------
 # FastAPI App
 # -----------------------------
-app = FastAPI(title="MovieLens Rating Predictor (MLflow Registry)")
+app = FastAPI(
+    title="MovieLens Rating Predictor",
+    description="""
+    Serves predictions from the **MLflow Model Registry** using dynamic model loading.
+    
+    ## Usage
+    Use the `/predict/{label}` endpoint to get rating predictions (1-5 stars).
+    
+    ## Available Models
+    *   **XGBoost** (Recommended)
+    *   **GLM** (ElasticNet)
+    *   **RandomForest**
+    """,
+    version="1.0.0"
+)
 
 # Store loaded models: {"GLM": model_obj, "XGBoost": model_obj}
 _models: Dict[str, Any] = {}
@@ -183,8 +208,17 @@ def health() -> Dict[str, Any]:
         "loaded_models": _versions,
     }
 
-@app.post("/predict/{label}", response_model=PredictResponse)
-def predict(label: str, req: PredictRequest) -> PredictResponse:
+@app.post(
+    "/predict/{label}", 
+    response_model=PredictResponse,
+    summary="Get Predictions",
+    description="Predict movie ratings using a specific model version from the registry.",
+    response_description="A list of predicted ratings (float) and metadata."
+)
+def predict(
+    req: PredictRequest,
+    label: str = Path(..., description="The model tag to use, e.g., 'XGBoost', 'GLM', 'RandomForest'")
+) -> PredictResponse:
     if label not in _models:
         raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
     
