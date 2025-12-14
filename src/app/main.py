@@ -152,15 +152,9 @@ def load_models() -> None:
         try:
             return Version(model_version.version)
         except InvalidVersion:
-            # Fallback: some MLflow versions might be plain integers like "1", "2"
-            # Try converting to string representation that Version can parse
-            try:
-                # Normalize integer-like strings to valid version format
-                return Version(str(int(model_version.version)))
-            except (ValueError, TypeError):
-                # If all parsing fails, return lowest version so it sorts last (reverse=True)
-                print(f"[startup] Warning: Invalid version '{model_version.version}', sorting with lowest priority")
-                return Version("0")
+            # If version string is invalid, return lowest version so it sorts last (reverse=True)
+            print(f"[startup] Warning: Invalid version '{model_version.version}', sorting with lowest priority")
+            return Version("0")
     
     versions = sorted(versions, key=version_key, reverse=True)
 
