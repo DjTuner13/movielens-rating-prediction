@@ -87,8 +87,13 @@ Serve the registered models via a production-ready API.
 # Set Tracking URI (if not using localhost)
 export MLFLOW_TRACKING_URI=http://localhost:5000
 
-# Start Uvicorn
+# Start Uvicorn (Interactive)
 uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000
+
+# Start Uvicorn (Background / Production)
+nohup uv run uvicorn src.app.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &
+# View logs: tail -f api.log
+
 ```
 
 ### Example Prediction
