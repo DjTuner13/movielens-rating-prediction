@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 import os
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path
 from pydantic import BaseModel, Field, field_validator
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -33,6 +34,13 @@ MODEL_NAME = "movielens_top3"
 
 # Map internal labels (from register_model.py) to API keys
 REQUIRED_LABELS = ["GLM", "RandomForest", "XGBoost"]
+
+# Enum for valid model labels
+class ModelLabel(str, Enum):
+    """Valid model labels that can be used in the prediction endpoint."""
+    GLM = "GLM"
+    RandomForest = "RandomForest"
+    XGBoost = "XGBoost"
 
 # Expected feature columns 
 GENRE_COLS = [
@@ -179,20 +187,26 @@ def health() -> Dict[str, Any]:
     }
 
 @app.post("/predict/{label}", response_model=PredictResponse)
-def predict(label: str, req: PredictRequest) -> PredictResponse:
-    if label not in _models:
-        raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
+def predict(
+    label: ModelLabel = Path(..., description="Model label to use for prediction"),
+    req: PredictRequest = ...
+) -> PredictResponse:
+    # Convert Enum to string for dictionary lookup
+    label_str = label.value
+    
+    if label_str not in _models:
+        raise HTTPException(status_code=404, detail=f"Model '{label_str}' not found or not loaded.")
     
     X = normalize_to_df(req)
     
     try:
-        preds = _models[label].predict(X)
+        preds = _models[label_str].predict(X)
         preds_list = [float(p) for p in list(preds)]
         
         return PredictResponse(
             model_name=MODEL_NAME,
-            model_version=_versions[label],
-            model_label=label,
+            model_version=_versions[label_str],
+            model_label=label_str,
             timestamp_utc=datetime.now(timezone.utc).isoformat(),
             n_records=len(preds_list),
             predictions=preds_list,
