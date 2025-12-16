@@ -176,6 +176,7 @@ resource "aws_instance" "ml_server" {
               
               # Set Environment Variables for all users
               echo 'export S3_BUCKET_NAME="${aws_s3_bucket.data_bucket.bucket}"' > /etc/profile.d/movielens.sh
+              echo 'export MLFLOW_TRACKING_URI="http://localhost:5000"' >> /etc/profile.d/movielens.sh
               chmod 644 /etc/profile.d/movielens.sh
               
               apt-get update
