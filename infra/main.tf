@@ -174,6 +174,10 @@ resource "aws_instance" "ml_server" {
               swapon /swapfile
               echo '/swapfile none swap sw 0 0' >> /etc/fstab
               
+              # Set Environment Variables for all users
+              echo 'export S3_BUCKET_NAME="${aws_s3_bucket.data_bucket.bucket}"' > /etc/profile.d/movielens.sh
+              chmod 644 /etc/profile.d/movielens.sh
+              
               apt-get update
               apt-get install -y python3-pip git default-jre build-essential awscli
 

@@ -106,6 +106,7 @@ class H2OWrapper:
         # Save Model
         best_model = self.aml.leader
         model_path = h2o.save_model(model=best_model, path=output_dir, force=True)
+        mlflow.log_artifact(model_path) # Upload model to MLflow
         logger.info(f"Best model saved to {model_path}")
         
         return lb, model_path
