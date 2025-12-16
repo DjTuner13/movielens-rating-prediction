@@ -18,12 +18,11 @@ Replace `<PUBLIC_IP>` with your EC2 instance IP (e.g., `100.48.xx.xx`).
 
 ### 🔍 How to make Predictions (Swagger UI)
 1.  Go to the **API Docs** URL.
-2.  Click **POST /predict/{label}** -> **Try it out**.
-3.  **Important**: In the `label` field, type one of the model tags:
-    *   `XGBoost` (Recommended)
-    *   `GLM`
-    *   `RandomForest`
-4.  Click **Execute**.
+2.  Choose the specific endpoint for the model you want to use:
+    *   `POST /predict/xgboost` (Recommended)
+    *   `POST /predict/glm`
+    *   `POST /predict/randomforest`
+3.  Click **Try it out** -> **Execute**.
 
 ---
 

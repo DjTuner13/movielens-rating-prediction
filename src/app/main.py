@@ -208,17 +208,8 @@ def health() -> Dict[str, Any]:
         "loaded_models": _versions,
     }
 
-@app.post(
-    "/predict/{label}", 
-    response_model=PredictResponse,
-    summary="Get Predictions",
-    description="Predict movie ratings using a specific model version from the registry.",
-    response_description="A list of predicted ratings (float) and metadata."
-)
-def predict(
-    req: PredictRequest,
-    label: str = Path(..., description="The model tag to use, e.g., 'XGBoost', 'GLM', 'RandomForest'")
-) -> PredictResponse:
+def _predict(req: PredictRequest, label: str) -> PredictResponse:
+    """Helper to run prediction for a specific model label."""
     if label not in _models:
         raise HTTPException(status_code=404, detail=f"Model '{label}' not found or not loaded.")
     
@@ -238,3 +229,30 @@ def predict(
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prediction failed: {e}")
+
+@app.post(
+    "/predict/glm", 
+    response_model=PredictResponse,
+    summary="Predict using GLM (ElasticNet)",
+    description="Get ratings using the GLM model."
+)
+def predict_glm(req: PredictRequest) -> PredictResponse:
+    return _predict(req, "GLM")
+
+@app.post(
+    "/predict/randomforest", 
+    response_model=PredictResponse,
+    summary="Predict using RandomForest",
+    description="Get ratings using the Random Forest model."
+)
+def predict_randomforest(req: PredictRequest) -> PredictResponse:
+    return _predict(req, "RandomForest")
+
+@app.post(
+    "/predict/xgboost", 
+    response_model=PredictResponse,
+    summary="Predict using XGBoost",
+    description="Get ratings using the XGBoost model."
+)
+def predict_xgboost(req: PredictRequest) -> PredictResponse:
+    return _predict(req, "XGBoost")
