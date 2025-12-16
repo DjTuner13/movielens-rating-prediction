@@ -6,6 +6,7 @@ import xgboost as xgb
 import mlflow
 import os
 import sys
+import boto3
 
 from mlflow.tracking import MlflowClient
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -126,14 +127,43 @@ def main():
         return
 
     out = pd.DataFrame(rows).sort_values(["RMSE"], ascending=[True])
-    print("\n=== COMPARISON TABLE (Test Set) ===")
-    print(out.to_string(index=False))
+    
+    # Store the human-readable report
+    report_lines = []
+    report_lines.append("=== CHAMPION TABLE (Test Set) ===")
+    report_lines.append(out.to_string(index=False))
 
     champ = out.iloc[0]
-    print(f"\nCHAMPION = {champ['Model']} (lowest RMSE)")
+    report_lines.append(f"\nCHAMPION = {champ['Model']} (lowest RMSE)")
+    
+    report_content = "\n".join(report_lines)
+    print("\n" + report_content)
 
-    out.to_csv("comparison_table.csv", index=False)
-    print("\nSaved: comparison_table.csv")
+    # Save to text file (easier for humans to read)
+    report_file = "champion_report.txt"
+    with open(report_file, "w") as f:
+        f.write(report_content)
+    print(f"\nSaved report: {report_file}")
+    
+    # Also save clean CSV for machine processing (optional, keeping it just in case)
+    out.to_csv("champion_table.csv", index=False)
+
+    # Upload to S3 if bucket is specified
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    if s3_bucket:
+        print(f"\nUploading to S3 bucket: {s3_bucket}...")
+        try:
+            s3 = boto3.client("s3")
+            s3.upload_file(report_file, s3_bucket, report_file)
+            print(f"Successfully uploaded to s3://{s3_bucket}/{report_file}")
+            
+            # optional: upload csv too if needed, but per request focusing on the 'pdf'/report view
+        except Exception as e:
+            print(f"Error uploading to S3: {e}")
+        except Exception as e:
+            print(f"Error uploading to S3: {e}")
+    else:
+        print("\nSkipping S3 upload. Set S3_BUCKET_NAME env var to upload.")
 
 if __name__ == "__main__":
     main()
